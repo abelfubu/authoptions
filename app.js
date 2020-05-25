@@ -37,7 +37,8 @@ mongoose.set("useCreateIndex", true);
 
 const userSchema = new mongoose.Schema({
     email: String,
-    password: String,
+    password: String,  
+    secret: String,  
     googleId: String
 }); 
 
@@ -48,6 +49,7 @@ const User = new mongoose.model("User", userSchema);
 
 // Passport Local Cookie session 
 passport.use(User.createStrategy());
+
 passport.serializeUser(function(user, done) {
     done(null, user.id);
 });
@@ -102,8 +104,9 @@ app.post('/login', (req, res) => {
         if(err){
             console.log(err);            
         } else {
-            passport.authenticate("local");
-            res.redirect("/secrets");
+            passport.authenticate("local")(req,res,function(){
+                res.redirect("/secrets");
+            });            
         }
     })
 });
@@ -118,16 +121,17 @@ app.get('/logout', (req, res) => {
 });
 
 app.get('/secrets', (req, res) => {
-    if(req.isAuthenticated()){
-        res.render("secrets");
-    } else {
-        res.redirect("/login");
-    }
+    User.find({"secret": {$ne: null}}, (err, foundSecrets) =>{
+        if(err) return console.log(err);
+        if(foundSecrets) {
+            res.render("secrets", {usersWhithSecrets: foundSecrets});
+        }
+    });
 });
 
 app.post('/register', (req, res) => {
     User.register({username: req.body.username}, req.body.password, function(err, usr){
-        if (err) {
+        if (err) {            
             console.log(err);
             res.redirect("back");            
         } else {
@@ -136,6 +140,30 @@ app.post('/register', (req, res) => {
             })
         }
     })
+});
+
+// Submit Routes 
+app.get('/submit', (req, res) => {
+    if(req.isAuthenticated()){
+        
+        res.render("submit");
+    } else {
+        res.redirect("/login");
+    }
+});
+
+app.post('/submit', (req, res) => {
+    const submittedSecret = req.body.secret;
+
+    User.findById(req.user.id, (err, foundUser) =>{
+        if(err) return console.log(err);
+        if(foundUser){
+            foundUser.secret = submittedSecret;
+            foundUser.save(function(){
+                res.redirect("/secrets");
+            });             
+        }        
+    });
 });
 
 app.listen(7000, () => {
